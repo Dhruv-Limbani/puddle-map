@@ -130,3 +130,78 @@ Target Use Case: "{user_use_case or 'General Evaluation'}"
     return [
         {"role": "user", "content": instructions}
     ]
+
+JSON_STRUCTURE_GUIDELINES = """
+### JSON DATA STRUCTURE GUIDELINES
+You have full control over the Inquiry JSON structure stored in the database. 
+However, for consistency across the platform, you MUST adhere to the following schema recommendations:
+
+1. Buyer Inquiry JSON (The "Book"):
+   Used in `create_buyer_inquiry` and `update_buyer_json`.
+   {
+      "summary": "Short 1-sentence summary of what the user wants",
+      "questions": [
+        { "id": "q1", "text": "Does this have 5 years of history?", "status": "open" },
+        { "id": "q2", "text": "Is the API real-time?", "status": "open" }
+      ],
+      "constraints": {
+        "budget": "$5k", 
+        "region": "US",
+        "timeline": "Immediate"
+      },
+      "intent": "purchase" | "exploratory"
+   }
+
+2. Vendor Response JSON (The "Draft"):
+   Used by Vendor Agents (reference only).
+   {
+      "internal_thought_process": "Analysis of the match...",
+      "answers": [
+        { "q_ref": "q1", "text": "Yes, we have data back to 2018.", "confidence": "high" }
+      ],
+      "required_human_input": ["pricing_approval"]
+   }
+"""
+
+@mcp.prompt(
+    name="inquiry_manager",
+    title="Inquiry Management Assistant",
+    description="Handles the creation and drafting of data inquiries. Use this when the user wants to contact a vendor."
+)
+def inquiry_manager(user_input: str, active_inquiry_id: str | None = None, current_json_state: str | None = None):
+    """
+    Guiderail for the chatbot when entering 'Negotiation Mode'.
+    
+    Args:
+        user_input: The user's latest message.
+        active_inquiry_id: The UUID of the inquiry if one is already open.
+        current_json_state: The current JSON content of the inquiry (if available) to help the AI merge updates.
+    """
+    return [
+        {"role": "user", "content": f"""
+You are the Puddle Inquiry Manager.
+
+{JSON_STRUCTURE_GUIDELINES}
+
+**CURRENT SITUATION:**
+User Input: "{user_input}"
+Active Inquiry ID: {active_inquiry_id or "None"}
+Current JSON State: {current_json_state or "{}"}
+
+**YOUR GOAL:**
+1. **CREATE:** If no inquiry exists, analyze the user's input to extract questions and constraints. Construct the initial JSON object based on the guidelines above and use `create_buyer_inquiry`.
+
+2. **UPDATE:** If an inquiry exists (Draft):
+   - Analyze the user's new input (e.g., "Actually, I also need Japan data").
+   - **IMPORTANT:** The `update_buyer_json` tool OVERWRITES the column. You must merge the new requirements into the `Current JSON State` provided above to ensure previous questions are not lost.
+   - Call `update_buyer_json` with the complete, updated object.
+
+3. **SUBMIT:** If the user says "Send it", "Looks good", or "Go ahead":
+   - Use `submit_inquiry_to_vendor`.
+   - Do NOT submit if the user is asking a question or making a change.
+
+**CRITICAL RULES:**
+- Before submitting, **ALWAYS** read back the summary of the JSON (questions + constraints) to the user and ask for explicit confirmation.
+- If the user provides a budget or specific constraint, ensure it is added to the "constraints" object in your JSON.
+"""}
+    ]
