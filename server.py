@@ -43,7 +43,7 @@ async def lifespan(app: FastAPI):
         yield
 
 app = FastAPI(lifespan=lifespan)
-app.add_middleware(APIKeyMiddleware)
+# app.add_middleware(APIKeyMiddleware)
 app.mount("/puddle-mcp", mcp.streamable_http_app())
 
 PORT = os.environ.get("PORT", 8002)
